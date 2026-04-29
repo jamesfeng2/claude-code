@@ -190,4 +190,35 @@ export class Mailbox {
       this.waiters.update(ws => [...ws, { fn, resolve }])
     })
   }
+
+// poll() - Synchronous, immediate consumption: Fire-and-forget - doesn't create promises or hold state
+// receive() - Asynchronous, waiting consumption:
+
+  // Typical polling pattern - sync is essential:
+while (shouldKeepGoing) {
+  const msg = mailbox.poll(msg => msg.source === 'user')
+  
+  if (msg) {
+    processMessage(msg)
+  } else {
+    // Do other work while waiting
+    doSomeOtherTask()
+  }
+  
+  await sleep(100)  // Explicit delay, not inside poll()
+}
+
+  
+  // Two async tasks both waiting for user messages
+Promise.all([
+  mailbox.receive(msg => msg.source === 'user'),  // Task A waits
+  mailbox.receive(msg => msg.source === 'user'),  // Task B waits
+]).then(([msgA, msgB]) => {
+  console.log('Task A got:', msgA)
+  console.log('Task B got:', msgB)
+  // Without removal, both would get the same message!
+})
+
+mailbox.send({ source: 'user', content: 'First' })   // Task A wakes up
+mailbox.send({ source: 'user', content: 'Second' })  // Task B wakes up
 }
