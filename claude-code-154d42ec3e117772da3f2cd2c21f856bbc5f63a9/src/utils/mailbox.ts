@@ -54,7 +54,7 @@ export class Mailbox {
   poll(fn: (msg: Message) => boolean = () => true): Message | undefined {
     const idx = this.queue.findIndex(fn)
     if (idx === -1) return undefined
-    return this.queue.splice(idx, 1)[0] Remove Matched Message
+    return this.queue.splice(idx, 1)[0]         // Remove Matched Message
   }
 
 // Without waiters - consumer must poll:
@@ -75,8 +75,8 @@ const msg = await mailbox.receive(msg => msg.source === 'user')  // Clean, effic
   receive(fn: (msg: Message) => boolean = () => true): Promise<Message> {
     const idx = this.queue.findIndex(fn)
     if (idx !== -1) {
-      const msg = this.queue.splice(idx, 1)[0] Remove Matched Message
-      if (msg) { 从队列中移除消息 返回那个消息给调用者
+      const msg = this.queue.splice(idx, 1)[0]         Remove Matched Message
+      if (msg) {                             从队列中移除消息 返回那个消息给调用者
         this.notify()
         return Promise.resolve(msg)
       }
@@ -86,12 +86,18 @@ const msg = await mailbox.receive(msg => msg.source === 'user')  // Clean, effic
     })
   }
 
-  subscribe = this.changed.subscribe
-
-  private notify(): void {
-    this.changed.emit()
+  subscribe = this.changed.subscribe // Manual notification subscription // when the mailbox state changed (message added/removed).
+                                     // It provided external notifications when the mailbox state changed (message added/removed). 
+  private notify(): void {     // To notify external listeners:
+    this.changed.emit()       // Must explicitly emit
   }
 }
+
+// External code could subscribe to mailbox changes:
+mailbox.subscribe(() => {            
+  console.log('Mailbox changed!')
+  console.log('New length:', mailbox.length)
+})
 
 // decoupling producer/consumer timing
 // Consumer waits first, producer sends later
@@ -150,12 +156,13 @@ export class Mailbox {
       this.waiters.update(ws => ws.filter((_, i) => i !== idx))
       
       if (waiter) {
-        waiter.resolve(msg) // send data to complete fullfillment promise chain
+        waiter.resolve(msg)           // send data to complete fullfillment promise chain
         return
       }
     }
     
-    this.queue.update(q => [...q, msg])
+    this.queue.update(q => [...q, msg])      // If no waiter matched, queue it
+                                            // ❌ No return needed - function ends naturally
   }
 
   poll(fn: (msg: Message) => boolean = () => true): Message | undefined {
@@ -165,7 +172,7 @@ export class Mailbox {
     if (idx === -1) return undefined
     
     const msg = queue[idx]
-    this.queue.update(q => q.filter((_, i) => i !== idx))
+    this.queue.update(q => q.filter((_, i) => i !== idx))   //This is a destructive operation - mached message is no longer in the mailbox after poll().
     return msg
   }
 
