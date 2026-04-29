@@ -30,11 +30,12 @@ export class Mailbox {
     return this._revision
   }
 // mailbox.send({ source: 'user', content: 'Hello' })   
-  send(msg: Message): void {
+  
+  send(msg: Message): void {  
     this._revision++
     const idx = this.waiters.findIndex(w => w.fn(msg))
     if (idx !== -1) {
-      const waiter = this.waiters.splice(idx, 1)[0]
+      const waiter = this.waiters.splice(idx, 1)[0]  // Remove Matched Waiter
       if (waiter) {
         waiter.resolve(msg)
         this.notify()
@@ -48,7 +49,7 @@ export class Mailbox {
   poll(fn: (msg: Message) => boolean = () => true): Message | undefined {
     const idx = this.queue.findIndex(fn)
     if (idx === -1) return undefined
-    return this.queue.splice(idx, 1)[0]
+    return this.queue.splice(idx, 1)[0] Remove Matched Message
   }
 // const userMessagespromise = mailbox.receive(
 //   (msg) => msg.source === 'user'  // fn: filter function
@@ -58,8 +59,8 @@ export class Mailbox {
   receive(fn: (msg: Message) => boolean = () => true): Promise<Message> {
     const idx = this.queue.findIndex(fn)
     if (idx !== -1) {
-      const msg = this.queue.splice(idx, 1)[0]
-      if (msg) {
+      const msg = this.queue.splice(idx, 1)[0] Remove Matched Message
+      if (msg) { 从队列中移除消息 返回那个消息给调用者
         this.notify()
         return Promise.resolve(msg)
       }
