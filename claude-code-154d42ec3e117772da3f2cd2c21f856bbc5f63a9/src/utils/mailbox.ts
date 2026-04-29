@@ -12,8 +12,8 @@ export type Message = {
 }
 
 type Waiter = {
-  fn: (msg: Message) => boolean
-  resolve: (msg: Message) => void
+  fn: (msg: Message) => boolean // Filter predicate
+  resolve: (msg: Message) => void //fullfilll promise履行承诺callback with msg 
 }
 
 export class Mailbox {
@@ -29,7 +29,7 @@ export class Mailbox {
   get revision(): number {
     return this._revision
   }
-
+// mailbox.send({ source: 'user', content: 'Hello' })   
   send(msg: Message): void {
     this._revision++
     const idx = this.waiters.findIndex(w => w.fn(msg))
@@ -50,7 +50,9 @@ export class Mailbox {
     if (idx === -1) return undefined
     return this.queue.splice(idx, 1)[0]
   }
-
+// const userMessages = mailbox.receive(
+//   (msg) => msg.source === 'user'  // fn: filter function
+// )
   receive(fn: (msg: Message) => boolean = () => true): Promise<Message> {
     const idx = this.queue.findIndex(fn)
     if (idx !== -1) {
