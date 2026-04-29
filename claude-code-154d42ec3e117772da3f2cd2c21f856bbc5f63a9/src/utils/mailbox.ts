@@ -50,9 +50,11 @@ export class Mailbox {
     if (idx === -1) return undefined
     return this.queue.splice(idx, 1)[0]
   }
-// const userMessages = mailbox.receive(
+// const userMessagespromise = mailbox.receive(
 //   (msg) => msg.source === 'user'  // fn: filter function
 // )
+
+  // const msg = await userMessagespromise  // ⏳ Waiting...
   receive(fn: (msg: Message) => boolean = () => true): Promise<Message> {
     const idx = this.queue.findIndex(fn)
     if (idx !== -1) {
