@@ -1,4 +1,9 @@
 import { createSignal } from './signal.js'
+// Waiters  	Async coordination, filtered subscribers	Efficient, decoupled	More complex
+// RxJS Observable	Multiple subscribers, reactive chains	Powerful operators, well-tested	Dependency overhead
+// EventEmitter	Simple pub/sub	Familiar pattern	No filtering, message loss
+// Generator/async iterator	Sequential consumption	Natural async syntax	Single consumer
+// Queue + polling	Simple cases	Easy to understand	Wasteful, blocking
 
 export type MessageSource = 'user' | 'teammate' | 'system' | 'tick' | 'task'
 
@@ -35,7 +40,7 @@ export class Mailbox {
     this._revision++
     const idx = this.waiters.findIndex(w => w.fn(msg))
     if (idx !== -1) {
-      const waiter = this.waiters.splice(idx, 1)[0]  // Remove Matched Waiter
+      const waiter = this.waiters.splice(idx, 1)[0]  // Remove Matched Waiter // destructring [waiter] //.at(0)
       if (waiter) {
         waiter.resolve(msg)
         this.notify()
@@ -51,6 +56,17 @@ export class Mailbox {
     if (idx === -1) return undefined
     return this.queue.splice(idx, 1)[0] Remove Matched Message
   }
+
+// Without waiters - consumer must poll:
+while (true) {
+  const msg = mailbox.poll(msg => msg.source === 'user')
+  if (msg) break
+  await sleep(100)  // Wasteful polling
+}
+
+// With waiters - consumer suspends efficiently:
+const msg = await mailbox.receive(msg => msg.source === 'user')  // Clean, efficient
+  
 // const userMessagespromise = mailbox.receive(
 //   (msg) => msg.source === 'user'  // fn: filter function
 // )
@@ -77,6 +93,21 @@ export class Mailbox {
   }
 }
 
+// decoupling producer/consumer timing
+// Consumer waits first, producer sends later
+const msgPromise = mailbox.receive(msg => msg.source === 'user')
+// ... do other work ...
+mailbox.send({ source: 'user', content: 'Hi' })  // ✅ Promise resolves
+const msg = await msgPromise
+
+// usage multiple independent consumers
+const userMsg = mailbox.receive(msg => msg.source === 'user')
+const sysMsg = mailbox.receive(msg => msg.source === 'system')
+const teamMsg = mailbox.receive(msg => msg.source === 'teammate')
+// Each waits independently, gets notified when matching message arrives
+
+
+
 
 // signal version
 
@@ -93,6 +124,7 @@ export type Message = {
   timestamp: string
 }
 
+// waiter pattern implements a producer-consumer queue 
 type Waiter = {
   fn: (msg: Message) => boolean
   resolve: (msg: Message) => void
@@ -118,7 +150,7 @@ export class Mailbox {
       this.waiters.update(ws => ws.filter((_, i) => i !== idx))
       
       if (waiter) {
-        waiter.resolve(msg)
+        waiter.resolve(msg) // send data to complete fullfillment promise chain
         return
       }
     }
