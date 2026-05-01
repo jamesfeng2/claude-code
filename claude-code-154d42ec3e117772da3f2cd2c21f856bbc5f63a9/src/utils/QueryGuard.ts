@@ -1,7 +1,7 @@
-/**
- * Synchronous state machine for the query lifecycle, compatible with
- * React's `useSyncExternalStore`.
- *
+/**                                                              
+ * Synchronous state machine for the query lifecycle, compatible with // 同步状态机，管理一次查询（query）的生命周期
+ * React's `useSyncExternalStore`.                                   // 防止并发查询、防止队列重入
+ *                                                                   // 保证：同一时间只有一个 query 在跑
  * Three states:
  *   idle        → no query, safe to dequeue and process
  *   dispatching → an item was dequeued, async chain hasn't reached onQuery yet
@@ -25,17 +25,17 @@
  *   )
  */
 import { createSignal } from './signal.js'
-
-export class QueryGuard {
-  private _status: 'idle' | 'dispatching' | 'running' = 'idle'
-  private _generation = 0
+                                                            //  查询锁
+export class QueryGuard {                                  // 它确保：队列不会重入、查询不会并发、旧查询不会误清理新查询。
+  private _status: 'idle' | 'dispatching' | 'running' = 'idle'   // 状态只有三种 indicator for UI/human 需要知道状态 
+  private _generation = 0                                  // 并发控制 the result 防止旧查询 清理新查询的状态
   private _changed = createSignal()
 
   /**
    * Reserve the guard for queue processing. Transitions idle → dispatching.
    * Returns false if not idle (another query or dispatch in progress).
    */
-  reserve(): boolean {
+  reserve(): boolean {                                  //   占位防止并发        
     if (this._status !== 'idle') return false
     this._status = 'dispatching'
     this._notify()
@@ -46,7 +46,7 @@ export class QueryGuard {
    * Cancel a reservation when processQueueIfReady had nothing to process.
    * Transitions dispatching → idle.
    */
-  cancelReservation(): void {
+  cancelReservation(): void {                  // dispatching → idle，撤销占位
     if (this._status !== 'dispatching') return
     this._status = 'idle'
     this._notify()
@@ -58,10 +58,10 @@ export class QueryGuard {
    * Accepts transitions from both idle (direct user submit)
    * and dispatching (queue processor path).
    */
-  tryStart(): number | null {
+  tryStart(): number | null {                   // dispatching/idle → running，真正开始查询
     if (this._status === 'running') return null
     this._status = 'running'
-    ++this._generation
+    ++this._generation                    // 防止旧查询的 finally 覆盖新查询
     this._notify()
     return this._generation
   }
@@ -71,7 +71,7 @@ export class QueryGuard {
    * (meaning the caller should perform cleanup). Returns false if a
    * newer query has started (stale finally block from a cancelled query).
    */
-  end(generation: number): boolean {
+  end(generation: number): boolean {          // 仅在 generation 匹配时结束查询
     if (this._generation !== generation) return false
     if (this._status !== 'running') return false
     this._status = 'idle'
@@ -85,7 +85,7 @@ export class QueryGuard {
    * Increments generation so stale finally blocks from the cancelled
    * query's promise rejection will see a mismatch and skip cleanup.
    */
-  forceEnd(): void {
+  forceEnd(): void {                        // 强制结束并让旧查询自动失效
     if (this._status === 'idle') return
     this._status = 'idle'
     ++this._generation
@@ -119,3 +119,61 @@ export class QueryGuard {
     this._changed.emit()
   }
 }
+
+4 个真实世界场景，全部来自常见前端业务（搜索框、表单提交、数据刷新、队列任务）。
+搜索框里连续输入 10 次，后端会收到 10 个请求，UI 会被旧请求覆盖新结果
+QueryGuard 的作用：
+只允许最新一次查询运行
+旧查询的 finally 自动失效（generation 机制）
+UI 永远只显示最新结果
+
+一句话：
+解决“旧请求覆盖新结果”的经典问题。 generation 机制
+
+- 每次搜索都生成一个新的 generation（版本号）
+- 请求回来时检查版本号 如果版本号不是最新 → 丢弃 只有最新版本号的请求能更新 UI
+
+
+2）表单提交：防止重复点击提交按钮
+QueryGuard 的作用：
+running 状态时禁止再次 start
+UI 可以根据 isActive 禁用按钮
+保证一次提交只会触发一次请求
+一句话：
+解决“重复提交”的业务事故。 
+  private running = signal(false);
+ async submit(payload: any) {
+    if (this.running()) return; // 防重复提交
+
+    this.running.set(true);
+    try {
+      await fetch('/api/submit', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+    } finally {
+      this.running.set(false);
+    }
+ }
+
+3）数据刷新：防止轮询 / 自动刷新 与 手动刷新 冲突
+真实问题：  
+页面有自动刷新（轮询），用户又手动点“刷新”，两个请求并发，UI 状态乱跳。
+QueryGuard 的作用：
+自动刷新 reserve → dispatching
+手动刷新 tryStart → running
+自动刷新被阻止，不会抢占 UI
+
+一句话：
+解决“自动刷新 vs 手动刷新”的冲突。
+
+4）任务队列：确保一次只处理一个任务（例如上传队列）
+真实问题：  
+上传队列中多个任务可能同时触发，导致资源竞争、顺序错乱。
+QueryGuard 的作用：
+队列先 reserve
+真正开始时 tryStart
+任务结束后 end → idle → 下一个任务开始
+
+一句话：
+让队列严格按顺序执行，不并发、不乱序。
