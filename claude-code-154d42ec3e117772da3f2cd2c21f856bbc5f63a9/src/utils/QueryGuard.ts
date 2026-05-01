@@ -31,8 +31,8 @@ try {
 }
 
 
-search = 用户主动触发，不需要 isActive()           用户输入多少次，就触发多少次，但只显示最新一次。
-refresh = 自动触发，需要 isActive() 来避免重复刷新
+search/submit = 用户主动触发，不需要 isActive()   并发允许（generation 控制）  用户输入多少次，就触发多少次，但只显示最新一次。
+refresh = 自动触发，需要 isActive() 来避免重复刷新 并发禁止 （isActive 控制）
 refresh(manual = false) {                        手动刷新时 → 永远允许执行
   if (!manual && guard.isActive) return;         自动刷新时，如果正在刷新 → 跳过
 
@@ -79,6 +79,13 @@ guard.end(g);                               任务结束，把锁还回去
 
 
 网络层允许并发 generation 控制，业务层必须串行 state 控制。
+
+网络乱序 response乱序 
+即使流程不并发，请求仍然可能乱序 request乱序 你只能在UI层丢弃旧请求 by generation
+
+isActive 控制自动刷新 and 手动刷新 
+isActive 控制流程，generation 控制结果                 
+                 
 
 import { createSignal } from './signal.js'
                                                             //  查询锁
@@ -188,6 +195,8 @@ UI 永远只显示最新结果
 
 - 每次搜索都生成一个新的 generation（版本号）
 - 请求回来时检查版本号 如果版本号不是最新 → 丢弃 只有最新版本号的请求能更新 UI
+
+你等于在重复造轮子, below is pseudo code                
 async search(keyword: string) {
     const g = this.generation() + 1;  // each search new number
     this.generation.set(g);          // latest number is what I want
@@ -301,13 +310,13 @@ async function search(keyword) {
     if (g !== guard.generation) return;
 
     // UI：更新数据
-    setData(res.items);
+    setData(res.items);                   // 请求成功且是最新 generation 时执行
   } catch (e) {
     if (g !== guard.generation) return;
     setError('搜索失败');
-  } finally {
+  } finally {                          // finally 会在成功/失败/取消/旧请求 都执行
     // 只有最新 generation 才能结束 loading
-    if (g === guard.generation) {
+    if (g === guard.generation) {      // 无论成功、失败、取消、旧请求，都必须结束 loading。
       setLoading(false);
     }
     guard.end(g);
@@ -315,7 +324,7 @@ async function search(keyword) {
 }
 
 
-angular version 
+angular version QueryGuard.ts 
 
 import { signal, computed, effect } from '@angular/core';
 
@@ -335,7 +344,7 @@ export class QueryGuardSignal {
   private listeners = new Set<() => void>();
 
   constructor() {
-    // 用 effect 把 signal 变化转成回调通知
+    // 用 effect 把 signal 变化转成回调通知 如果没有 effect，subscribe 完全不会工作
     effect(() => {
       // 任何依赖 state/generation 的变化都会触发
       this._state();
@@ -389,9 +398,9 @@ export class QueryGuardSignal {
     }
   }
 
-  // === 原来的 subscribe / getSnapshot 等价接口 ===
-
-  subscribe(listener: () => void): () => void {
+  // === 原来的 subscribe / getSnapshot 等价接口 ===  在组件里监听 guard 的变化 → 自动更新 UI（loading/data/error）或触发副作用
+        
+  subscribe(listener: () => void): () => void {   // 让外部可以订阅 QueryGuard 的状态变化（state / generation / isActive）
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
@@ -432,4 +441,73 @@ async function search(keyword: string) {
     guard.end(g);
   }
 }
+
+QueryGuard.subscribe() 的真实使用示例
+
+subscribe 可以读取 input 数据 当前组件状态 （keyword、payload、filter）。
+subscribe 不能触发新的业务逻辑 触无限循环（search/refresh/upload）。guard.reserve(), search(keyword());
+subscribe = 观察者，不是操作者
+                 
+用法 1：组件里监听 loading 状态（最常见）只要 guard 的状态变化，我就更新 loading。
+
+const guard = new QueryGuardSignal();
+let loading = false;
+const unsubscribe = guard.subscribe(() => {
+  loading = guard.isActive();
+  render(); // 重新渲染 UI
+});
+                 
+用法 2：监听 generation（例如调试、日志）每次任务开始/结束，我都打印状态机变化
+guard.subscribe(() => {
+  console.log(
+    'state =', guard.state(),
+    'generation =', guard.generation()
+  );
+});
+
+用法 3：监听 isActive → 自动禁用按钮 只要 guard 正在执行任务，按钮就禁用
+
+let disabled = false;
+guard.subscribe(() => {
+  disabled = guard.isActive();
+  updateButton(disabled);
+});
+
+用法 4：subscribe 本身不是 effect，但 subscribe 可以“自动触发” effect 的执行
+effect 是内部“广播器”，
+subscribe 是外部“监听器”。subscribe 不能创建 effect
+effect 负责广播，subscribe 负责接收。
+两者不能互相嵌套
+
+constructor() {       effect 只应该在 QueryGuardSignal 内部创建一次
+  effect(() => {
+    this._state();
+    this._generation();
+    for (const l of this.listeners) l();
+  });
+}
+
+用法 5：subscribe + effect（自动触发 effect）99% 的情况下：外部完全不需要额外 effect
+  99% 的情况下：外部完全不需要额外 effect
+                 
+const guard = new QueryGuardSignal();
+                 
+// effect：只创建一次
+effect(() => {
+  const state = guard.state();
+  const gen = guard.generation();
+
+  console.log('effect triggered:', state, gen);
+
+  if (state === 'running') {
+    startSpinner();
+  } else {
+    stopSpinner();
+  }
+});
+
+// subscribe：触发 effect 的依赖变化（不创建 effect）subscribe：监听 guard 的变化
+guard.subscribe(() => {
+  // 这里不做副作用，只是触发 effect 重新执行
+});
 
