@@ -24,6 +24,14 @@
  *     queryGuard.getSnapshot,
  *   )
  */
+
+reserve()：boolean 队列说“我要执行一个任务” 用 state 阻止重复触发
+tryStart()：number 真正开始执行            用 state 阻止并发
+generation：防止旧任务覆盖新任务
+end()：boolean 结束任务，                用 state 恢复 idle
+isActive                               用 state 控制 UI
+
+
 import { createSignal } from './signal.js'
                                                             //  查询锁
 export class QueryGuard {                                  // 它确保：队列不会重入、查询不会并发、旧查询不会误清理新查询。
@@ -132,7 +140,26 @@ UI 永远只显示最新结果
 
 - 每次搜索都生成一个新的 generation（版本号）
 - 请求回来时检查版本号 如果版本号不是最新 → 丢弃 只有最新版本号的请求能更新 UI
+async search(keyword: string) {
+    const g = this.generation() + 1;  // each search new number
+    this.generation.set(g);          // latest number is what I want
+    this.state.set('running');      // for UI
 
+    try {
+      const res = await fetch(`/api/search?q=${keyword}`).then(r => r.json());
+
+      // generation 不匹配 → 旧请求 → 自动丢弃
+      if (g !== this.generation()) return;
+
+      this.result.set(res.items);
+      this.error.set(null);
+    } catch (e) {
+      if (g !== this.generation()) return;
+      this.error.set('搜索失败');
+    } finally {
+      if (g === this.generation()) this.state.set('idle');
+    }
+  }
 
 2）表单提交：防止重复点击提交按钮
 QueryGuard 的作用：
@@ -177,3 +204,65 @@ QueryGuard 的作用：
 
 一句话：
 让队列严格按顺序执行，不并发、不乱序。
+
+
+
+
+场景 1：搜索框（完整版本：含 UI 状态更新）
+const guard = new QueryGuard();
+
+// UI 状态
+let loading = false;
+let data = [];
+let error = null;
+
+function setLoading(v) {
+  loading = v;
+  render();
+}
+
+function setData(v) {
+  data = v;
+  render();
+}
+
+function setError(v) {
+  error = v;
+  render();
+}
+
+async function search(keyword) {
+  // 队列占位
+  if (!guard.reserve()) return;
+
+  // 真正开始执行
+  const g = guard.tryStart();
+  if (g === null) {
+    guard.cancelReservation();
+    return;
+  }
+
+  // UI：开始加载
+  setLoading(true);
+  setError(null);
+
+  try {
+    const res = await fetch(`/api/search?q=${keyword}`).then(r => r.json());
+
+    // generation 不匹配 → 旧请求 → 自动丢弃
+    if (g !== guard.generation) return;
+
+    // UI：更新数据
+    setData(res.items);
+  } catch (e) {
+    if (g !== guard.generation) return;
+    setError('搜索失败');
+  } finally {
+    // 只有最新 generation 才能结束 loading
+    if (g === guard.generation) {
+      setLoading(false);
+    }
+    guard.end(g);
+  }
+}
+
