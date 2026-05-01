@@ -85,7 +85,7 @@ const msg = await mailbox.receive(msg => msg.source === 'user')  // Clean, effic
       this.waiters.push({ fn, resolve })
     })
   }
-
+                                      // 暴露信号的订阅方法
   subscribe = this.changed.subscribe // Manual notification subscription // when the mailbox state changed (message added/removed).
                                      // It provided external notifications when the mailbox state changed (message added/removed). 
   private notify(): void {     // To notify external listeners:
@@ -150,21 +150,21 @@ export class Mailbox {
   send(msg: Message): void {
     this._revision.update(v => v + 1)
     
-    const idx = this.waiters().findIndex(w => w.fn(msg))
+    const idx = this.waiters().findIndex(w => w.fn(msg))  // 第一步：检查是否有人等这个消息
     if (idx !== -1) {
-      const waiter = this.waiters()[idx]
-      this.waiters.update(ws => ws.filter((_, i) => i !== idx))
+      const waiter = this.waiters()[idx]                      // 找到了！移除这个等待者
+      this.waiters.update(ws => ws.filter((_, i) => i !== idx))  
       
-      if (waiter) {
+      if (waiter) {                    // 直接给他消息，完成Promise
         waiter.resolve(msg)           // send data to complete fullfillment promise chain
         return
       }
     }
-    
+                                            // 第二步：没人等，就放进队列
     this.queue.update(q => [...q, msg])      // If no waiter matched, queue it
                                             // ❌ No return needed - function ends naturally
   }
-
+                                           // 轮询获取（同步）用途： 快速检查"有没有符合条件的消��"
   poll(fn: (msg: Message) => boolean = () => true): Message | undefined {
     const queue = this.queue()
     const idx = queue.findIndex(fn)
@@ -175,9 +175,9 @@ export class Mailbox {
     this.queue.update(q => q.filter((_, i) => i !== idx))   //This is a destructive operation - mached message is no longer in the mailbox after poll().
     return msg
   }
-
+                                  //  - 异步等待（高效）  
   receive(fn: (msg: Message) => boolean = () => true): Promise<Message> {
-    const queue = this.queue()
+    const queue = this.queue()                
     const idx = queue.findIndex(fn)
     
     if (idx !== -1) {
@@ -186,7 +186,7 @@ export class Mailbox {
       return Promise.resolve(msg)
     }
     
-    return new Promise<Message>(resolve => {
+    return new Promise<Message>(resolve => {    // 第二步：没有就注册等待 //等着，直到 send() 匹配了才会执行 resolve(msg)
       this.waiters.update(ws => [...ws, { fn, resolve }])
     })
   }
@@ -194,8 +194,8 @@ export class Mailbox {
 // poll() - Synchronous, immediate consumption: Fire-and-forget - doesn't create promises or hold state
 // receive() - Asynchronous, waiting consumption:
 
-  // Typical polling pattern - sync is essential:
-while (shouldKeepGoing) {
+  // Typical polling pattern - sync is essential: // 每100毫秒检查一次 ← 很浪费！
+while (shouldKeepGoing) {            
   const msg = mailbox.poll(msg => msg.source === 'user')
   
   if (msg) {
@@ -204,12 +204,12 @@ while (shouldKeepGoing) {
     // Do other work while waiting
     doSomeOtherTask()
   }
-  
-  await sleep(100)  // Explicit delay, not inside poll()
+                    // ❌ 浪费资源的轮询方式
+  await sleep(100)  // Explicit delay, not inside poll() 
 }
 
   
-  // Two async tasks both waiting for user messages
+  // Two async tasks both waiting for user messages // - 异步等待（高效
 Promise.all([
   mailbox.receive(msg => msg.source === 'user'),  // Task A waits
   mailbox.receive(msg => msg.source === 'user'),  // Task B waits
