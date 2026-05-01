@@ -37,6 +37,8 @@ const g = guard.tryStart(); 现在可以真正开始执行
 guard.end(g); 任务结束，把锁还回去
 
 
+网络层允许并发 generation 控制，业务层必须串行 state 控制。
+
 import { createSignal } from './signal.js'
                                                             //  查询锁
 export class QueryGuard {                                  // 它确保：队列不会重入、查询不会并发、旧查询不会误清理新查询。
@@ -267,6 +269,125 @@ async function search(keyword) {
     if (g === guard.generation) {
       setLoading(false);
     }
+    guard.end(g);
+  }
+}
+
+
+angular version 
+
+import { signal, computed, effect } from '@angular/core';
+
+type QueryGuardState = 'idle' | 'dispatching' | 'running';
+
+export class QueryGuardSignal {
+  // 内部状态机
+  private readonly _state = signal<QueryGuardState>('idle');
+  private readonly _generation = signal(0);
+
+  // 对外只读视图
+  readonly state = computed(() => this._state());
+  readonly generation = computed(() => this._generation());
+  readonly isActive = computed(() => this._state() !== 'idle');
+
+  // 订阅（模拟原来的 subscribe）
+  private listeners = new Set<() => void>();
+
+  constructor() {
+    // 用 effect 把 signal 变化转成回调通知
+    effect(() => {
+      // 任何依赖 state/generation 的变化都会触发
+      this._state();
+      this._generation();
+      for (const l of this.listeners) l();
+    });
+  }
+
+  // === 原 API 等价实现 ===
+
+  // idle -> dispatching
+  reserve(): boolean {
+    if (this._state() !== 'idle') return false;
+    this._state.set('dispatching');
+    return true;
+  }
+
+  // dispatching -> idle
+  cancelReservation(): void {
+    if (this._state() === 'dispatching') {
+      this._state.set('idle');
+    }
+  }
+
+  // idle/dispatching -> running
+  // 返回当前 generation
+  tryStart(): number | null {
+    const s = this._state();
+    if (s === 'idle' || s === 'dispatching') {
+      this._state.set('running');
+      const g = this._generation() + 1;
+      this._generation.set(g);
+      return g;
+    }
+    return null;
+  }
+
+  // 只有 generation 匹配时才允许结束
+  end(generation: number): void {
+    if (generation !== this._generation()) return;
+    if (this._state() === 'running') {
+      this._state.set('idle');
+    }
+  }
+
+  // 强制结束当前查询（让旧 finally 全部失效）
+  forceEnd(): void {
+    if (this._state() !== 'idle') {
+      this._state.set('idle');
+      this._generation.update(g => g + 1);
+    }
+  }
+
+  // === 原来的 subscribe / getSnapshot 等价接口 ===
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  getSnapshot() {
+    return {
+      state: this._state(),
+      generation: this._generation(),
+      isActive: this.isActive(),
+    };
+  }
+}
+
+signal usage
+
+const guard = new QueryGuardSignal();
+
+async function search(keyword: string) {
+  if (!guard.reserve()) return;
+
+  const g = guard.tryStart();
+  if (g === null) {
+    guard.cancelReservation();
+    return;
+  }
+
+  setLoading(true);
+
+  try {
+    const res = await fetch(`/api/search?q=${keyword}`).then(r => r.json());
+    if (g !== guard.generation()) return;
+    setData(res.items);
+  } catch {
+    if (g !== guard.generation()) return;
+    setError('搜索失败');
+  } finally {
+    if (g === guard.generation()) setLoading(false);
     guard.end(g);
   }
 }
