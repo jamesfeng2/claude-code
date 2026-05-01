@@ -1,3 +1,41 @@
+
+不并发
+不重入
+不乱序
+旧结果不会覆盖新结果。**
+
+它通常被用在：
+搜索框
+列表刷新
+表单提交
+队列任务（例如上传）
+自动刷新 vs 手动刷新冲突
+
+也就是说：
+只要是“异步 + UI + 可能重复触发”的地方，就会用 QueryGuard
+
+if (!guard.reserve()) return;
+
+const g = guard.tryStart();
+if (g === null) {
+  guard.cancelReservation();
+  return;
+}
+
+try {
+  const result = await doAsyncWork();
+  if (g !== guard.generation) return;
+  updateUI(result);
+} finally {
+  guard.end(g);
+}
+
+
+search = 用户主动触发，不需要 isActive()           用户输入多少次，就触发多少次，但只显示最新一次。
+refresh = 自动触发，需要 isActive() 来避免重复刷新
+refresh(manual = false) {                        手动刷新时 → 永远允许执行
+  if (!manual && guard.isActive) return;         自动刷新时，如果正在刷新 → 跳过
+
 /**                                                              
  * Synchronous state machine for the query lifecycle, compatible with // 同步状态机，管理一次查询（query）的生命周期
  * React's `useSyncExternalStore`.                                   // 防止并发查询、防止队列重入
@@ -31,10 +69,13 @@ generation：防止旧任务覆盖新任务
 end()：boolean 结束任务，                用 state 恢复 idle
 isActive                               用 state 控制 UI
 
-if (!guard.reserve()) return;  “我要开始一个任务，有没有空位？”
-const g = guard.tryStart(); 现在可以真正开始执行
-...
-guard.end(g); 任务结束，把锁还回去
+if (!guard.reserve()) return;                     “我要开始一个任务，有没有空位？”
+const g = guard.tryStart();                       现在可以真正开始执行
+if (g === null) {  guard.cancelReservation();  return;    轮到我了吗？
+ ... UI()
+ ... fetch()   
+ ... if (g !== guard.generation) return;         generation 检查
+guard.end(g);                               任务结束，把锁还回去
 
 
 网络层允许并发 generation 控制，业务层必须串行 state 控制。
@@ -355,7 +396,7 @@ export class QueryGuardSignal {
     return () => this.listeners.delete(listener);
   }
 
-  getSnapshot() {
+  getSnapshot() {        
     return {
       state: this._state(),
       generation: this._generation(),
