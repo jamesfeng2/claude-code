@@ -31,6 +31,11 @@ generation：防止旧任务覆盖新任务
 end()：boolean 结束任务，                用 state 恢复 idle
 isActive                               用 state 控制 UI
 
+if (!guard.reserve()) return;  “我要开始一个任务，有没有空位？”
+const g = guard.tryStart(); 现在可以真正开始执行
+...
+guard.end(g); 任务结束，把锁还回去
+
 
 import { createSignal } from './signal.js'
                                                             //  查询锁
