@@ -1,3 +1,66 @@
+
+一个 Claude 可以调用的工具，需要具备什么能力、输入什么、输出什么、如何运行”。
+Tool
+│
+├── name / aliases
+│      → 工具叫什么
+│
+├── inputSchema
+│      → 工具接受什么参数
+│
+├── call()
+│      → 真正执行工具
+│
+├── description()
+│      → 告诉 Claude 这个工具能干什么
+│
+├── isConcurrencySafe()
+│      → 能不能和其他工具同时运行
+│
+├── isReadOnly()
+│      → 是不是只读
+│
+├── isDestructive()
+│      → 会不会产生破坏性操作
+│
+└── interruptBehavior()
+       → 用户新输入来了怎么办
+|
+| ToolResult
+
+工具执行后，不只是返回一个简单的 string。
+Tool.call()
+      ↓
+ToolResult
+      │
+      ├── data
+      │     → 工具真正的结果
+      │
+      ├── newMessages
+      │     → 可以产生新的 conversation messages
+      │
+      ├── contextModifier
+      │     → 可以修改后续 context
+      │
+      └── mcpMeta
+            → MCP metadata
+
+
+
+最重要的是 call()
+Claude
+  ↓
+"我要使用 Bash tool"
+  ↓
+Tool.call(...)
+  ↓
+执行 command
+  ↓
+Promise<ToolResult>
+  ↓
+返回结果
+
+
 import type {
   ToolResultBlockParam,
   ToolUseBlockParam,
