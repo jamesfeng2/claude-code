@@ -12,7 +12,7 @@ export type TaskType =
   | 'monitor_mcp'
   | 'dream'
 
-export type TaskStatus =
+export type TaskStatus =   // 生命周期
   | 'pending'
   | 'running'
   | 'completed'
@@ -23,8 +23,9 @@ export type TaskStatus =
  * True when a task is in a terminal state and will not transition further.
  * Used to guard against injecting messages into dead teammates, evicting
  * finished tasks from AppState, and orphan-cleanup paths.
- */
-export function isTerminalTaskStatus(status: TaskStatus): boolean {
+ * 任务已经结束，不应该再继续改变状态。
+ */ 
+export function isTerminalTaskStatus(status: TaskStatus): boolean {    // terminal state
   return status === 'completed' || status === 'failed' || status === 'killed'
 }
 
@@ -91,6 +92,7 @@ function getTaskIdPrefix(type: TaskType): string {
   return TASK_ID_PREFIXES[type] ?? 'x'
 }
 
+// 后面再产生随机字符。
 // Case-insensitive-safe alphabet (digits + lowercase) for task IDs.
 // 36^8 ≈ 2.8 trillion combinations, sufficient to resist brute-force symlink attacks.
 const TASK_ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyz'
@@ -104,8 +106,14 @@ export function generateTaskId(type: TaskType): string {
   }
   return id
 }
-
-export function createTaskStateBase(
+ 
+// 创建一个新的 Task 的初始状态
+// createTaskStateBase(
+//   'b12345678',
+//   'local_bash',
+//   'run npm test'
+// )
+ export function createTaskStateBase(
   id: string,
   type: TaskType,
   description: string,
@@ -122,4 +130,14 @@ export function createTaskStateBase(
     outputOffset: 0,
     notified: false,
   }
+// 得到大概   {
+//   id: 'b12345678',
+//   type: 'local_bash',
+//   status: 'pending',
+//   description: 'run npm test',
+//   startTime: ...,
+//   outputFile: ...,
+//   outputOffset: 0,
+//   notified: false
+// }
 }
