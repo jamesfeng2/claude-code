@@ -75,6 +75,14 @@ import type { Command } from './commands.js'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
 import type { ThinkingConfig } from './utils/thinking.js'
 
+// {
+//   "type": "object",
+//   "properties": {
+//     "path": { "type": "string" },
+//     "recursive": { "type": "boolean" }
+//   }
+// }
+//工具 → Claude 读取 JSON Schema → Claude 生成 ToolInputJSONSchema → Claude 用它推理工具输入结构
 export type ToolInputJSONSchema = {
   [x: string]: unknown
   type: 'object'
