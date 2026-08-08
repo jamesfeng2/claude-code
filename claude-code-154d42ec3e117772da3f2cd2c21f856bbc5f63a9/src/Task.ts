@@ -1,3 +1,30 @@
+
+                    Task.ts
+                       │
+        ┌──────────────┼──────────────┐
+        ↓              ↓              ↓
+     TaskType       TaskStatus      TaskState
+        │              │              │
+     是什么？        到哪一步？      保存什么？
+        │              │              │
+   bash/agent/...  pending/running   id
+                   completed/...     type
+                                     status
+                                     time
+                                     output
+generateTaskId()
+        ↓
+给 Task 一个唯一 ID
+
+createTaskStateBase()
+        ↓
+创建 Task 的初始状态
+
+isTerminalTaskStatus()
+        ↓
+判断 Task 是否已经彻底结束
+
+
 import { randomBytes } from 'crypto'
 import type { AppState } from './state/AppState.js'
 import type { AgentId } from './types/ids.js'
