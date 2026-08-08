@@ -56,8 +56,11 @@ export class ActivityManager {
     return ActivityManager.instance
   }
 
-  /**
+  /** 这次操作距离上一次用户操作，经过了多少秒
    * Called when user interacts with the CLI (typing, commands, etc.)
+   * eturns milliseconds. now = 1754640005000
+   * lastUserActivityTime = 10,000 ms
+    * now                   = 13,000 ms
    */
   recordUserActivity(): void {
     // Don't record user time if CLI is active (CLI takes precedence)
@@ -65,7 +68,7 @@ export class ActivityManager {
       const now = this.getNow()
       const timeSinceLastActivity = (now - this.lastUserActivityTime) / 1000
 
-      if (timeSinceLastActivity > 0) {
+      if (timeSinceLastActivity > 0) {   // Only record the elapsed time if time actually moved forward.
         const activeTimeCounter = this.getActiveTimeCounter()
         if (activeTimeCounter) {
           const timeoutSeconds = this.USER_ACTIVITY_TIMEOUT_MS / 1000
