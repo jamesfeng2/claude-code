@@ -4,7 +4,7 @@ type ActivityManagerOptions = {
   getNow?: () => number
   getActiveTimeCounter?: typeof getActiveTimeCounterImpl
 }
-
+ 
 /**
  * ActivityManager handles generic activity tracking for both user and CLI operations.
  * It automatically deduplicates overlapping activities and provides separate metrics
@@ -48,6 +48,8 @@ export class ActivityManager {
 
   /**
    * Create a new instance with custom options (for testing purposes)
+   * static is class method, not belong to any particluar object
+   * singlton return a shared instance
    */
   static createInstance(options?: ActivityManagerOptions): ActivityManager {
     ActivityManager.instance = new ActivityManager(options)
