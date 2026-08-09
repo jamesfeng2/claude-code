@@ -854,6 +854,47 @@ export type ToolDef<
  * default fills in. All other keys come from D verbatim — preserving arity,
  * optional presence, and literal types exactly as `satisfies Tool` did.
  */
+// Does D have property K?
+
+// YES:
+//     Can K be undefined?
+
+//     YES → use the default type
+//     NO  → keep D[K]
+
+// NO:
+//     use the default type
+
+// Omit             → remove old properties
+// [K in ...]       → rebuild properties
+// -?               → make them required
+// extends ? :      → choose which type to use
+
+// type ToolDefaults = {
+//   timeout: number
+//   enabled: boolean
+//   retries: number
+// }
+// type D = {
+//   name: string
+//   timeout?: number
+//   enabled: boolean
+// }
+// type DefaultableToolKeys =
+//   | "timeout"
+//   | "enabled"
+//   | "retries"
+
+// result will be: 
+// type BuiltTool = {
+//   name: string
+//   timeout: number
+//   enabled: boolean
+//   retries: number
+// }
+// & here means combine two object types together.
+
+
 type BuiltTool<D> = Omit<D, DefaultableToolKeys> & {
   [K in DefaultableToolKeys]-?: K extends keyof D
     ? undefined extends D[K]
