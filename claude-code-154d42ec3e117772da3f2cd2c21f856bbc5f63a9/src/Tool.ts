@@ -2,7 +2,7 @@
 一个 Claude 可以调用的工具，需要具备什么能力、输入什么、输出什么、如何运行”。
 Tool
 │
-├── name / aliases
+├── name / aliases 
 │      → 工具叫什么
 │
 ├── inputSchema
@@ -451,7 +451,17 @@ export type ToolCallProgress<P extends ToolProgressData = ToolProgressData> = (
   progress: ToolProgress<P>,
 ) => void
 
-// Type for any schema that outputs an object with string keys
+// Type representing a Zod validator for any schema that outputs an object with string keys
+// {
+//   name: "James",
+//   age: 50,
+//   scores: [10, 20, 30],
+//   address: {
+//     city: "Sydney"
+//   }
+// }
+
+// any is don't check its value, unknown is i check it, but unknown
 export type AnyObject = z.ZodType<{ [key: string]: unknown }>
 
 /**
