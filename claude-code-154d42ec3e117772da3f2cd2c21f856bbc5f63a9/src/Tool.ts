@@ -1,5 +1,9 @@
 
 一个 Claude 可以调用的工具，需要具备什么能力、输入什么、输出什么、如何运行”。
+
+Tool represents the complete object.
+ToolDef represents what developers are allowed to provide.
+       
 Tool
 │
 ├── name / aliases 
