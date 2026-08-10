@@ -178,16 +178,11 @@ export type ValidationResult =
 // aim to 更新 UI 状态
 // 它接收一个对象：
 // 这些字段会被写入 UI 状态，例如：
-
 //     jsx → 要显示的 React/Ink 组件
-
 //     shouldHidePromptInput → 是否隐藏输入框
-
 //     showSpinner → 是否显示加载动画
-
 //     clearLocalJSX → 清除临时 UI
 //     isLocalJSXCommand     -> 可以显示临时 UI（例如进度条、提示框）
-
 //     isImmediate → 是否立即刷新界面
 
 // 可能实现
