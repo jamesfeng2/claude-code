@@ -1,5 +1,7 @@
 
 
+14. claude-ai 和 console 是两种用户身份
+
 13.  
                        Command[]
                            │
@@ -716,16 +718,16 @@ export function meetsAvailabilityRequirement(cmd: Command): boolean {
   for (const a of cmd.availability) {
     switch (a) {
       case 'claude-ai':
-        if (isClaudeAISubscriber()) return true
+        if (isClaudeAISubscriber()) return true   // must be a subscriber
         break
       case 'console':
         // Console API key user = direct 1P API customer (not 3P, not claude.ai).
         // Excludes 3P (Bedrock/Vertex/Foundry) who don't set ANTHROPIC_BASE_URL
         // and gateway users who proxy through a custom base URL.
         if (
-          !isClaudeAISubscriber() &&
-          !isUsing3PServices() &&
-          isFirstPartyAnthropicBaseUrl()
+          !isClaudeAISubscriber() &&  // 不是 Claude.ai
+          !isUsing3PServices() &&     // 不是 Bedrock / Vertex / Foundry 等 3P
+          isFirstPartyAnthropicBaseUrl()   // 直接使用 Anthropic 第一方 API
         )
           return true
         break
@@ -743,6 +745,21 @@ export function meetsAvailabilityRequirement(cmd: Command): boolean {
  * Loads all command sources (skills, plugins, workflows). Memoized by cwd
  * because loading is expensive (disk I/O, dynamic imports).
  根据当前目录 cwd，把所有来源的 Command / Skill 一次性加载起来，最后合并成一个, 并缓存结果
+ ┌───────────────────────────────┐
+│ Non-builtin / extensible      │
+│                               │
+│ bundled skills                │
+│ plugin skills                 │
+│ workflow                      │
+│ dynamic skills                │
+├───────────────────────────────┤
+│ Built-in                      │
+│                               │
+│ /plan                         │
+│ /review                       │
+│ /compact                      │
+└───────────────────────────────┘
+Built-in commands 是一个稳定的“底座”；所有外部/动态扩展都放在它前面
  */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
   const [
@@ -788,10 +805,10 @@ export async function getCommands(cwd: string): Promise<Command[]> {
   }
 
   // Dedupe dynamic skills - only add if not already present
-  const baseCommandNames = new Set(baseCommands.map(c => c.name))
+  const baseCommandNames = new Set(baseCommands.map(c => c.name))  
   const uniqueDynamicSkills = dynamicSkills.filter(
     s =>
-      !baseCommandNames.has(s.name) &&
+      !baseCommandNames.has(s.name) &&     // Built-in commands 开始的位置
       meetsAvailabilityRequirement(s) &&
       isCommandEnabled(s),
   )
@@ -801,8 +818,9 @@ export async function getCommands(cwd: string): Promise<Command[]> {
   }
 
   // Insert dynamic skills after plugin skills but before built-in commands
-  const builtInNames = new Set(COMMANDS().map(c => c.name))
-  const insertIndex = baseCommands.findIndex(c => builtInNames.has(c.name))
+  顺序本身代表 Command 的来源层级
+  const builtInNames = new Set(COMMANDS().map(c => c.name))  // 找到第一个 Built-in Command
+  const insertIndex = baseCommands.findIndex(c => builtInNames.has(c.name))  // 在哪里
 
   if (insertIndex === -1) {
     return [...baseCommands, ...uniqueDynamicSkills]
