@@ -1,6 +1,50 @@
 
 
+13.  
+                       Command[]
+                           │
+             ┌─────────────┼─────────────┐
+             │             │             │
+             ▼             ▼             ▼
 
+    getSkillToolCommands   getSlash...   getMcpSkillCommands
+             │             │             │
+             │             │             │
+        “能不能给       “是不是一个      “MCP 当前
+         Model调用？”     Skill？”        有哪些？”
+             │             │             │
+             ▼             ▼             ▼
+        Model Tool      Skill Index        MCP
+
+12: 不要为了“性能”到处加 cache；只有当数据生命周期稳定、计算昂贵时才 cache
+getSkillToolCommands(cwd)
+        ↓
+基于 cwd 的相对稳定数据
+        ↓
+适合 cache  memoize(...)
+
+
+getMcpSkillCommands(cmd)
+        ↓
+基于 runtime MCP state   fresh 
+        ↓
+可能随时变化 MCP 是运行时动态状态，而且过滤很便宜 → 不 memoize
+server connect
+server disconnect
+tool refresh
+session state
+        ↓
+不适合简单 cache
+
+
+type: "prompt" 表示这个 Command 的结果主要是一段 Prompt / 文本，可以被送进模型上下文；因此它天然适合 Model Invocation
+type: 'local'  Claude Code 自己执行本地代码  --> 结果
+Skill 更偏向文件 + Markdown/Prompt 内容 
+plugin is kind of extension 
+
+Command = 一个“按钮/入口”
+Skill = 一套“专业能力/知识”
+Plugin = 一个“能力扩展包”
 
 1: Command Registry + Plugin/Skill Loader + Permission Gate + Remote Safety Gate。
 维护 Command objects 的集合，而不是命令名称列表。
@@ -100,7 +144,12 @@ Skill   = “一个专门能力/知识的模块”  用户、Plugin 或 Claude C
                             /skills/testing
      /compact               /plugin-skill
 
-
+11. disableModelInvocation 是一个关键安全边界
+Command
+   │
+   ├── Human invocation
+   │
+   └── Model invocation
 
 // //////////////////////////////////////////
 
@@ -797,12 +846,12 @@ export function clearCommandsCache(): void {
 export function getMcpSkillCommands(
   mcpCommands: readonly Command[],
 ): readonly Command[] {
-  if (feature('MCP_SKILLS')) {
+  if (feature('MCP_SKILLS')) {   //只在开启时返回。
     return mcpCommands.filter(
       cmd =>
         cmd.type === 'prompt' &&
         cmd.loadedFrom === 'mcp' &&
-        !cmd.disableModelInvocation,
+        !cmd.disableModelInvocation,    // model invocation allowed
     )
   }
   return []
@@ -810,8 +859,8 @@ export function getMcpSkillCommands(
 
 // SkillTool shows ALL prompt-based commands that the model can invoke
 // This includes both skills (from /skills/) and commands (from /commands/)
-export const getSkillToolCommands = memoize(
-  async (cwd: string): Promise<Command[]> => {
+export const getSkillToolCommands = memoize(   // para is func
+  async (cwd: string): Promise<Command[]> => {   // return async Promise<>
     const allCommands = await getCommands(cwd)
     return allCommands.filter(
       cmd =>
@@ -841,7 +890,7 @@ export const getSlashCommandToolSkills = memoize(
         cmd =>
           cmd.type === 'prompt' &&
           cmd.source !== 'builtin' &&
-          (cmd.hasUserSpecifiedDescription || cmd.whenToUse) &&
+          (cmd.hasUserSpecifiedDescription || cmd.whenToUse) &&   // must have desc or “什么时候应该使用我？”
           (cmd.loadedFrom === 'skills' ||
             cmd.loadedFrom === 'plugin' ||
             cmd.loadedFrom === 'bundled' ||
