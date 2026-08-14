@@ -1,3 +1,109 @@
+
+
+
+
+1: Command Registry + Plugin/Skill Loader + Permission Gate + Remote Safety Gate。
+维护 Command objects 的集合，而不是命令名称列表。
+
+各种 Command 
+   ↓
+注册
+   ↓
+加载
+   ↓
+Feature Flag 过滤
+   ↓
+Auth / Provider 过滤
+   ↓
+isCommandEnabled()
+   ↓
+动态 Skill / Plugin / Workflow 合并
+   ↓
+getCommands()
+   ↓
+给 TUI / Model / Remote Bridge 使用
+
+
+Command {
+    name
+    type
+    description
+    source
+    aliases
+    availability
+    ...
+}
+
+5. 这其实是一个“产品功能开关系统”
+PROACTIVE
+KAIROS
+BRIDGE_MODE
+DAEMON
+VOICE_MODE
+HISTORY_SNIP
+WORKFLOW_SCRIPTS
+CCR_REMOTE_SETUP
+EXPERIMENTAL_SKILL_SEARCH
+KAIROS_GITHUB_WEBHOOKS
+ULTRAPLAN
+TORCH
+UDS_INBOX
+FORK_SUBAGENT
+BUDDY
+
+Feature Flag
+      ↓
+是否加载代码
+      ↓
+是否注册 Command
+      ↓
+最终用户是否看到这个功能
+
+6: 双层体系
+...(process.env.USER_TYPE === 'ant' && !process.env.IS_DEMO
+    ? INTERNAL_ONLY_COMMANDS
+    : [])
+
+7. 真正的核心是 getCommands()
+
+getCommands(cwd)
+       ↓
+loadAllCommands(cwd)
+       ↓
+取得所有 command
+       ↓
+availability filter
+       ↓
+isCommandEnabled
+       ↓
+dynamic skills
+       ↓
+dedupe
+       ↓
+重新插入 dynamic skills
+       ↓
+return Command[]
+
+9. 一个非常重要的概念：Command and Skill
+
+Command = “一个能力的入口”  它是 Claude Code 内置功能。
+Skill   = “一个专门能力/知识的模块”  用户、Plugin 或 Claude Code 自己提供的一种可复用能力。
+
+                Command
+                   │
+        ┌──────────┴──────────┐
+        │                     │
+   Built-in Command          Skill  Skill 在内部也可以表现成一个 Command。a function block
+        │                     │
+     /plan                  /xxx
+     /review                /skills/database
+                            /skills/testing
+     /compact               /plugin-skill
+
+
+
+// //////////////////////////////////////////
+
 // biome-ignore-all assist/source/organizeImports: ANT-ONLY import markers must not be reordered
 import addDir from './commands/add-dir/index.js'
 import autofixPr from './commands/autofix-pr/index.js'
@@ -57,8 +163,43 @@ import usage from './commands/usage/index.js'
 import theme from './commands/theme/index.js'
 import vim from './commands/vim/index.js'
 import { feature } from 'bun:bundle'
+///////////////////////////////////
+feature 是函数；一个“编译时开关”  它读取/表达一个 Bun build-time feature flag，而返回值会被 Bun 的构建器用于条件编译和死代码消除
+bun build src/index.ts --feature VOICE_MODE
+await Bun.build({
+  entrypoints: ["./src/index.ts"],
+  features: [
+    "VOICE_MODE",
+    "BRIDGE_MODE",
+  ],
+})
+
+  Claude Code 有很多不同版本、内部功能、实验功能和客户环境；Build 时决定哪些 Command 根本进入最终程序
+你看这个文件就很明显：VOICE_MODE、BRIDGE_MODE、KAIROS、WORKFLOW_SCRIPTS、FORK_SUBAGENT、BUDDY 等都在这里决定是否注册
+
+  1. 最重要的原因：不要把不用的代码带进最终 bundle
+    
 // Dead code elimination: conditional imports
 /* eslint-disable @typescript-eslint/no-require-imports */
+const proactive =
+  feature('PROACTIVE') || feature('KAIROS')
+    ? require('./commands/proactive.js').default
+    : null
+
+2. 这比普通 runtime if 更强 because程序已经 build
+if (process.env.VOICE_MODE) {
+    loadVoice()
+}
+
+4. 还有一个非常重要的原因：内部功能
+同一套 source code
+        ↓
+不同 build configuration
+        ↓
+不同 capability
+
+/////////////////////////////////
+
 const proactive =
   feature('PROACTIVE') || feature('KAIROS')
     ? require('./commands/proactive.js').default
@@ -167,6 +308,27 @@ import {
   clearPluginSkillsCache,
 } from './utils/plugins/loadPluginCommands.js'
 import memoize from 'lodash-es/memoize.js'
+
+function add(a, b) {
+  console.log('真正计算了')
+  return a + b
+}
+
+const memoizedAdd = memoize(add)
+
+console.log(memoizedAdd(2, 3))
+// 真正计算了
+// 5
+
+console.log(memoizedAdd(2, 3))
+// 5
+// 不会再打印“真正计算了”
+
+console.log(memoizedAdd(10, 20))
+// 真正计算了
+// 30
+
+
 import { isUsing3PServices, isClaudeAISubscriber } from './utils/auth.js'
 import { isFirstPartyAnthropicBaseUrl } from './utils/model/providers.js'
 import env from './commands/env/index.js'
@@ -255,8 +417,18 @@ export const INTERNAL_ONLY_COMMANDS = [
 
 // Declared as a function so that we don't run this until getCommands is called,
 // since underlying functions read from config, which can't be read at module initialization time
+commands.ts 被 import
+        ↓
+不要立即执行所有 command 初始化
+        ↓
+等 getCommands() 真正需要的时候
+        ↓
+才创建 COMMANDS()
+是第一层 Command Registry。
+
+
 const COMMANDS = memoize((): Command[] => [
-  addDir,
+  addDir,    // import addDir from './commands/add-dir/index.js'
   advisor,
   agents,
   branch,
@@ -349,6 +521,82 @@ export const builtInCommandNames = memoize(
   (): Set<string> =>
     new Set(COMMANDS().flatMap(_ => [_.name, ...(_.aliases ?? [])])),
 )
+
+// demo above ///////////////////////////////////////////
+把所有内置 command 的名字和 aliases 做成一个 Set，并且只计算一次
+本质上是在做一个比较昂贵的转换：COMMANDS 取 name 取 aliases --> flatMap --> 创建 Set
+
+memoize(
+  (): Set<string> =>
+    new Set(...)
+)
+
+1: const COMMANDS = () => [
+  {
+    name: 'plan',
+    aliases: ['p']
+  },
+  {
+    name: 'review',
+    aliases: ['r']
+  },
+  {
+    name: 'compact'
+  }
+]
+
+2: console.log(builtInCommandNames())
+
+3: compute: 
+COMMANDS()
+   ↓
+[
+  { name: 'plan', aliases: ['p'] },
+  { name: 'review', aliases: ['r'] },
+  { name: 'compact' }
+]
+   ↓
+flatMap()
+   ↓
+[
+  'plan',
+  'p',
+  'review',
+  'r',
+  'compact'
+]
+   ↓
+new Set()
+   ↓
+Set {
+  'plan',
+  'p',
+  'review',
+  'r',
+  'compact'
+}
+
+4: final result
+Set {
+  'plan',
+  'p',
+  'review',
+  'r',
+  'compact'
+}
+
+
+
+
+
+
+
+
+
+//////////////////////
+
+
+
 
 async function getSkills(cwd: string): Promise<{
   skillDirCommands: Command[]
@@ -445,19 +693,20 @@ export function meetsAvailabilityRequirement(cmd: Command): boolean {
 /**
  * Loads all command sources (skills, plugins, workflows). Memoized by cwd
  * because loading is expensive (disk I/O, dynamic imports).
+ 根据当前目录 cwd，把所有来源的 Command / Skill 一次性加载起来，最后合并成一个, 并缓存结果
  */
 const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
   const [
     { skillDirCommands, pluginSkills, bundledSkills, builtinPluginSkills },
     pluginCommands,
     workflowCommands,
-  ] = await Promise.all([
+  ] = await Promise.all([   // 同时进行 并行加载
     getSkills(cwd),
     getPluginCommands(),
     getWorkflowCommands ? getWorkflowCommands(cwd) : Promise.resolve([]),
   ])
 
-  return [
+  return [   // spread operator
     ...bundledSkills,
     ...builtinPluginSkills,
     ...skillDirCommands,
@@ -474,14 +723,15 @@ const loadAllCommands = memoize(async (cwd: string): Promise<Command[]> => {
  * auth changes (e.g. /login) take effect immediately.
  */
 export async function getCommands(cwd: string): Promise<Command[]> {
-  const allCommands = await loadAllCommands(cwd)
+  // 系统发现/加载到的所有 commands。
+  const allCommands = await loadAllCommands(cwd)  // await keyword remove Promise<> type Promise<Command[]>
 
   // Get dynamic skills discovered during file operations
   const dynamicSkills = getDynamicSkills()
 
   // Build base commands without dynamic skills
   const baseCommands = allCommands.filter(
-    _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_),
+    _ => meetsAvailabilityRequirement(_) && isCommandEnabled(_), // _ 只是一个变量名字
   )
 
   if (dynamicSkills.length === 0) {
