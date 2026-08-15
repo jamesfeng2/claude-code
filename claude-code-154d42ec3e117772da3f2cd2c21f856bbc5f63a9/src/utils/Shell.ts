@@ -153,6 +153,8 @@ export const getPsProvider = memoize(async (): Promise<ShellProvider> => {
   return createPowerShellProvider(psPath)
 })
 
+// const provider = await resolveProvider["bash"]()
+// const provider = await resolveProvider["powershell"]()
 const resolveProvider: Record<ShellType, () => Promise<ShellProvider>> = {
   bash: async () => (await getShellConfig()).provider,
   powershell: getPsProvider,
