@@ -89,14 +89,14 @@ export async function findSuitableShell(): Promise<string> {
   }
 
   // Check user's preferred shell from environment
-  const env_shell = process.env.SHELL
+  const env_shell = process.env.SHELL    //   "/bin/bash"
   // Only consider SHELL if it's bash or zsh
   const isEnvShellSupported =
     env_shell && (env_shell.includes('bash') || env_shell.includes('zsh'))
   const preferBash = env_shell?.includes('bash')
 
   // Try to locate shells using which (uses Bun.which when available)
-  const [zshPath, bashPath] = await Promise.all([which('zsh'), which('bash')])
+  const [zshPath, bashPath] = await Promise.all([which('zsh'), which('bash')]) // which('zsh')  → "/bin/zsh"
 
   // Populate shell paths from which results and fallback locations
   const shellPaths = ['/bin', '/usr/bin', '/usr/local/bin', '/opt/homebrew/bin']
@@ -139,7 +139,7 @@ export async function findSuitableShell(): Promise<string> {
 async function getShellConfigImpl(): Promise<ShellConfig> {
   const binShell = await findSuitableShell()
   const provider = await createBashShellProvider(binShell)
-  return { provider }
+  return { provider }   //{provider: provider}
 }
 
 // Memoize the entire shell config so it only happens once per session
@@ -155,6 +155,11 @@ export const getPsProvider = memoize(async (): Promise<ShellProvider> => {
 
 // const provider = await resolveProvider["bash"]()
 // const provider = await resolveProvider["powershell"]()
+// the provider is resolved when needed. 
+// const resolveProvider = {
+//   bash: bashProvider,
+//   powershell: powershellProvider
+// }
 const resolveProvider: Record<ShellType, () => Promise<ShellProvider>> = {
   bash: async () => (await getShellConfig()).provider,
   powershell: getPsProvider,
