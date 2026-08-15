@@ -29,8 +29,7 @@ Tool
 │
 └── interruptBehavior()
        → 用户新输入来了怎么办
-|
-| ToolResult
+
 
 工具执行后，不只是返回一个简单的 string。
 Tool.call()
@@ -72,8 +71,10 @@ import type {
 import type {
   ElicitRequestURLParams,
   ElicitResult,
-} from '@modelcontextprotocol/sdk/types.js'
-import type { UUID } from 'crypto'
+} from '@modelcontextprotocol/sdk/types.js'  
+// MCP is the protocol Claude Code uses to communicate with external tools/servers
+import type { UUID } from 'crypto'  // 550e8400-e29b-41d4-a716-446655440000
+//Zod is a TypeScript/JavaScript library for runtime validation. infer z type to ts
 import type { z } from 'zod/v4'
 import type { Command } from './commands.js'
 import type { CanUseToolFn } from './hooks/useCanUseTool.js'
@@ -117,9 +118,9 @@ import type {
 // Import PermissionResult from centralized location to break import cycles
 import type {
   AdditionalWorkingDirectory,
-  PermissionMode,
+  PermissionMode,   //bypass, allow, reason, edit,
   PermissionResult,
-} from './types/permissions.js'
+} from './types/permissions.js'  // source code uses the .js extension to match the runtime module path.
 // Import tool progress types from centralized location to break import cycles
 import type {
   AgentToolProgress,
@@ -167,8 +168,25 @@ export type QueryChainTracking = {
   depth: number
 }
 
+// export const check = (): ValidationResult => {
+//   return { result: true }
+// }
+// or
+// export function check(): ValidationResult {
+//   if (somethingIsValid) {
+//     return { result: true }
+//   }
+
+//   return {
+//     result: false,
+//     message: "Invalid input",
+//     errorCode: 400
+//   }
+// }
+// const validation = check()
+// if (validation.result) {
 export type ValidationResult =
-  | { result: true }
+  | { result: true }   
   | {
       result: false
       message: string
@@ -229,6 +247,23 @@ import type { ToolPermissionRulesBySource } from './types/permissions.js'
 
 // Re-export for backwards compatibility
 export type { ToolPermissionRulesBySource }
+
+  // DeepImmutable  This recursively adds readonly.
+// type DeepImmutable<T> = {
+//   readonly [K in keyof T]: DeepImmutable<T[K]>
+// }
+  //       │
+  //       ├── mode cannot change
+  //       ├── nested objects cannot change
+  //       ├── nested arrays cannot change
+  //       └── etc.
+
+ // Readonly protects the top-level user property, but user.name could still potentially be changed.
+       // Readonly<{
+       //   user: {
+       //     name: string
+       //   }
+       // }>
 
 // Apply DeepImmutable to the imported type
 export type ToolPermissionContext = DeepImmutable<{
@@ -424,8 +459,8 @@ export function filterToolProgressMessages(
   progressMessagesForMessage: ProgressMessage[],
 ): ProgressMessage<ToolProgressData>[] {
   return progressMessagesForMessage.filter(
-    (msg): msg is ProgressMessage<ToolProgressData> =>
-      msg.data?.type !== 'hook_progress',
+    (msg): msg is ProgressMessage<ToolProgressData> => // type predicate check return-type produce true/false
+      msg.data?.type !== 'hook_progress',   // check value type, the is check return type
   )
 }
 
@@ -461,7 +496,7 @@ export type ToolCallProgress<P extends ToolProgressData = ToolProgressData> = (
 // }
 
 // any is don't check its value, unknown is i check it, but unknown
-export type AnyObject = z.ZodType<{ [key: string]: unknown }>
+export type AnyObject = z.ZodType<{ [key: string]: unknown }>   // general zod schema vs object schema
 
 /**
  * Checks if a tool matches the given name (primary name or alias).
@@ -478,7 +513,7 @@ export function toolMatchesName(
  */
 export function findToolByName(tools: Tools, name: string): Tool | undefined {
   return tools.find(t => toolMatchesName(t, name))
-}
+}   // array find() searches an array and returns the first element that matches a condition.
 
 export type Tool<
   Input extends AnyObject = AnyObject,
