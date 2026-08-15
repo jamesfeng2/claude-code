@@ -184,7 +184,133 @@ export type ExecOptions = {
 /**
  * Execute a shell command using the environment snapshot
  * Creates a new shell process for each command execution
+ exec("ls -la", signal, "bash")
  */
+exec(command)
+     │
+     ▼
+读取 options
+     │
+     ▼
+找到 Shell Provider
+     │
+     ▼
+生成 command ID
+     │
+     ▼
+准备 Sandbox 临时目录
+     │
+     ▼
+provider.buildExecCommand()
+     │
+     ▼
+检查 cwd 是否还存在
+     │
+     ├── 不存在 → 恢复
+     │
+     └── 无法恢复 → failed
+     │
+     ▼
+检查 abortSignal
+     │
+     └── 已取消 → aborted
+     │
+     ▼
+是否 Sandbox？
+     │
+     ├── 是 → wrapWithSandbox()
+     │
+     └── 否
+     │
+     ▼
+决定 Pipe / File 模式
+     │
+     ├── Pipe → 实时 stdout
+     │
+     └── File → stdout/stderr 写文件
+     │
+     ▼
+spawn()
+     │
+     ▼
+真正启动 Shell
+     │
+     ▼
+wrapSpawn()
+     │
+     ├── timeout
+     ├── abort
+     ├── process tree
+     └── task output
+     │
+     ▼
+实时 stdout callback
+     │
+     ▼
+cleanup
+spawn() = 创建/启动子进程
+
+import { spawn } from "child_process"
+
+const child = spawn("ls", ["-la"])
+const chi =   spawn("node", ["-e", "console.log('Hello')"])
+
+child.stdout.on("data", (data) => {
+  console.log(data.toString())
+})
+
+
+
+provider = 不同 Shell 的执行规则
+provider 是一组“告诉程序：这个 Shell 应该怎么启动、怎么传命令”的规则。
+
+const bashProvider = {
+  shellPath: "/bin/bash",
+
+  getSpawnArgs(command) {
+    return ["-c", command]
+  }
+}
+
+// return ["-c", "ls -la"]
+provider.getSpawnArgs("ls -la") 
+
+import { spawn } from "child_process"
+
+const providers = {
+  bash: {
+    shellPath: "/bin/bash",
+
+    getSpawnArgs(command) {
+      return ["-c", command]
+    }
+  },
+
+  powershell: {
+    shellPath: "powershell",
+
+    getSpawnArgs(command) {
+      return ["-Command", command]
+    }
+  }
+}
+
+function exec(command, shellType) {
+  const provider = providers[shellType]
+
+  const child = spawn(
+    provider.shellPath,
+    provider.getSpawnArgs(command)
+  )
+
+  child.stdout.on("data", data => {
+    console.log(data.toString())
+  })
+}
+
+exec("echo Hello", "bash")
+
+/////////////////////////////////////////////////////////////////////////////
 export async function exec(
   command: string,
   abortSignal: AbortSignal,
@@ -199,6 +325,7 @@ export async function exec(
     shouldAutoBackground,
     onStdout,
   } = options ?? {}
+  
   const commandTimeout = timeout || DEFAULT_TIMEOUT
 
   const provider = await resolveProvider[shellType]()
@@ -222,7 +349,7 @@ export async function exec(
 
   let commandString = builtCommand
 
-  let cwd = pwd()
+  let cwd = pwd() // 当前工作目录
 
   // Recover if the current working directory no longer exists on disk.
   // This can happen when a command deletes its own CWD (e.g., temp dir cleanup).
